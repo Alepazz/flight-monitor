@@ -12,3 +12,4 @@ __pycache__/
 # Runtime data
 price_history.jsonl
 deals.txt
+.last_alert

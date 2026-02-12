@@ -38,6 +38,7 @@ CONFIG_PATH = SCRIPT_DIR / "config.json"
 EXAMPLE_CONFIG_PATH = SCRIPT_DIR / "config.example.json"
 HISTORY_PATH = SCRIPT_DIR / "price_history.jsonl"
 LOG_PATH = SCRIPT_DIR / "monitor.log"
+LAST_ALERT_PATH = SCRIPT_DIR / ".last_alert"
 
 # Nomi aeroporti noti (estendibili)
 KNOWN_AIRPORTS = {
@@ -304,6 +305,48 @@ def _route_label(config):
     dest_name = get_airport_name(config.get("destination", ""))
     origins_str = ", ".join(origin_names) if len(origin_names) <= 3 else f"{len(origin_names)} aeroporti"
     return f"{origins_str} - {dest_name}"
+
+
+def send_heartbeat_email(config, best_price, total_flights):
+    """Invia email settimanale di conferma funzionamento (nessuna offerta trovata)."""
+    email_to = config.get("email_to", "")
+    email_from = config.get("email_from", "")
+    email_cc = config.get("email_cc", "")
+    app_password = config.get("email_app_password", "")
+    if not email_to or not app_password or app_password == "YOUR_APP_PASSWORD":
+        return
+
+    route = _route_label(config)
+    threshold = config["price_threshold_pp"]
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Flight Monitor attivo — nessuna offerta sotto €{threshold}/pp questa settimana"
+    msg["From"] = email_from
+    msg["To"] = email_to
+    if email_cc:
+        msg["Cc"] = email_cc
+
+    text_body = (
+        f"Ciao,\n\n"
+        f"Flight Monitor per la rotta {route} è attivo e funzionante.\n\n"
+        f"Questa settimana non sono stati trovati voli sotto la soglia di €{threshold}/persona.\n"
+        f"Miglior prezzo trovato nell'ultimo check: €{best_price:.0f}/persona "
+        f"({total_flights} voli analizzati).\n\n"
+        f"Continuo a monitorare ogni {config.get('check_interval_hours', 12)} ore.\n\n"
+        f"-- Flight Monitor {route}"
+    )
+
+    msg.attach(MIMEText(text_body, "plain"))
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(email_from, app_password)
+            recipients = [email_to] + ([email_cc] if email_cc else [])
+            server.sendmail(email_from, recipients, msg.as_string())
+        log("Email heartbeat settimanale inviata")
+    except Exception as e:
+        log(f"Errore invio email heartbeat: {e}")
 
 
 def send_email(config, flights, threshold):
@@ -573,6 +616,7 @@ def main():
         )
         send_telegram(config, format_telegram_message(good_deals, threshold, config))
         send_email(config, good_deals, threshold)
+        LAST_ALERT_PATH.write_text(datetime.now().isoformat())
 
         deals_path = SCRIPT_DIR / "deals.txt"
         with open(deals_path, "a") as f:
@@ -586,6 +630,21 @@ def main():
         best = unique_flights[0]
         log(f"Prezzo minimo: €{best['price_pp']:.0f}/persona (soglia: €{threshold})")
         log("Nessun volo sotto soglia, riprovo al prossimo check")
+
+        # Heartbeat: mercoledì dopo le 21, se nessuna email offerte negli ultimi 7 giorni
+        now = datetime.now()
+        if now.weekday() == 2 and now.hour >= 21:
+            send_heartbeat = True
+            if LAST_ALERT_PATH.exists():
+                try:
+                    last_alert = datetime.fromisoformat(LAST_ALERT_PATH.read_text().strip())
+                    if (now - last_alert).days < 7:
+                        send_heartbeat = False
+                except (ValueError, OSError):
+                    pass
+            if send_heartbeat:
+                send_heartbeat_email(config, best["price_pp"], len(unique_flights))
+                LAST_ALERT_PATH.write_text(now.isoformat())
 
     log("Monitoraggio completato\n")
 
