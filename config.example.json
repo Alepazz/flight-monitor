@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy this file to config.json and fill in your values",
+
+  "origins": ["MXP", "LIN", "BGY"],
+  "destination": "MLE",
+  "date_from": "2027-01-01",
+  "date_to": "2027-02-28",
+  "nights_min": 7,
+  "nights_max": 10,
+  "adults": 2,
+  "price_threshold_pp": 700,
+  "max_stops": 1,
+  "sample_every_n_days": 5,
+  "delay_between_searches": 4,
+
+  "email_to": "you@gmail.com",
+  "email_from": "you@gmail.com",
+  "email_cc": "",
+  "email_app_password": "YOUR_APP_PASSWORD",
+
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  "check_interval_hours": 12
+}

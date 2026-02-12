@@ -1,0 +1,14 @@
+# User config (contains secrets)
+config.json
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Runtime data
+price_history.jsonl
+deals.txt
